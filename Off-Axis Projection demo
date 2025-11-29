@@ -1,0 +1,91 @@
+import pygame
+import cv2
+import mediapipe as mp
+
+SCALE = 120
+EYE_DIST = 8.0
+WIN_WIDTH = 800
+WIN_HEIGHT = 600
+
+mp_face = mp.solutions.face_mesh
+
+def get_head(cap, face_mesh):
+    ok, frame = cap.read()
+    if not ok:
+        return 0, 0, False
+    frame = cv2.flip(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    res = face_mesh.process(rgb)
+    if not res.multi_face_landmarks:
+        return 0, 0, False
+    pt = res.multi_face_landmarks[0].landmark[168]
+    return (pt.x - 0.5) * 2, (pt.y - 0.5) * 2, True
+
+def project(x, y, z, hx, hy, WIDTH, HEIGHT):
+    d = EYE_DIST + z
+    f = EYE_DIST / d
+    sx = hx + (x - hx) * f
+    sy = hy + (y - hy) * f
+    px = int(WIDTH/2 + sx * SCALE)
+    py = int(HEIGHT/2 + sy * SCALE)
+    return px, py
+
+def main():
+    pygame.init()
+    
+    # Centrage de la fenêtre Pygame
+    import os
+    os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (
+        (pygame.display.Info().current_w - WIN_WIDTH) // 2,
+        (pygame.display.Info().current_h - WIN_HEIGHT) // 2
+    )
+
+    screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
+    pygame.display.set_caption("Off-Axis Perspective")
+    cap = cv2.VideoCapture(0)
+    face_mesh = mp_face.FaceMesh(max_num_faces=1)
+
+    running = True
+    while running:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
+                running = False
+
+        hx, hy, ok = get_head(cap, face_mesh)
+        hx *= 5
+        hy *= 5
+
+        screen.fill((0,0,0))
+
+        TL = (-2, 1.2, 0)
+        TR = ( 2, 1.2, 0)
+        BR = ( 2,-1.2, 0)
+        BL = (-2,-1.2, 0)
+
+        TL_far = project(TL[0], TL[1], 6, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        TR_far = project(TR[0], TR[1], 6, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        BR_far = project(BR[0], BR[1], 6, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        BL_far = project(BL[0], BL[1], 6, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+
+        pTL = project(*TL, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        pTR = project(*TR, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        pBR = project(*BR, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+        pBL = project(*BL, hx, hy, WIN_WIDTH, WIN_HEIGHT)
+
+        pygame.draw.line(screen, (255,255,255), pTL, TL_far, 2)
+        pygame.draw.line(screen, (255,255,255), pTR, TR_far, 2)
+        pygame.draw.line(screen, (255,255,255), pBR, BR_far, 2)
+        pygame.draw.line(screen, (255,255,255), pBL, BL_far, 2)
+
+        pygame.draw.line(screen, (255,255,255), TL_far, TR_far, 2)
+        pygame.draw.line(screen, (255,255,255), TR_far, BR_far, 2)
+        pygame.draw.line(screen, (255,255,255), BR_far, BL_far, 2)
+        pygame.draw.line(screen, (255,255,255), BL_far, TL_far, 2)
+
+        pygame.display.flip()
+
+    cap.release()
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
